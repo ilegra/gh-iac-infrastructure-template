@@ -30,6 +30,7 @@ on:
         options:
           - 'apply'
           - 'plan'
+          - 'destroy'
 
 concurrency:
   group: terragrunt-${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }}
@@ -148,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "$ACTION" = "apply" ]; then
+          if [ "$ACTION" = "apply" ] || [ "$ACTION" = "destroy" ]; then
             EXTRA_ARGS="-auto-approve -input=false"
           else
             EXTRA_ARGS="-input=false"
