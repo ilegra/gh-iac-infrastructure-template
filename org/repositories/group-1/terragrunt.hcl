@@ -35,7 +35,7 @@ dependency "teams" {
 }
 
 dependencies {
-  paths = ["../../settings", "../../rulesets"]
+  paths = ["../../rulesets"]
 }
 
 inputs = {

@@ -205,8 +205,7 @@ Configure these in **Settings -> Secrets and variables -> Actions**:
 1. Navigate to **Actions** -> **Github infrastructure pipeline**.
 2. Click **Run workflow**.
 3. Configure the inputs:
-   - **Module**: Select `all`, `org/settings`, `org/teams`, `org/rulesets`, `org/repositories`, a specific group (`org/repositories/group-1`, `group-2`), or `custom`.
-   - **Custom module**: If `custom` was selected, specify the path (e.g. `org/repositories/group-3`).
+   - **Module**: Select `all`, `org/settings`, `org/teams`, `org/rulesets`, `org/repositories`, or a specific group (`org/repositories/group-1`, `group-2`).
    - **Action**: `apply` (default), `plan`, or `destroy`.
 
 ### Running via GitHub CLI (`gh`)

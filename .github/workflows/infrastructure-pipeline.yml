@@ -16,12 +16,6 @@ on:
           - 'org/repositories'
           - 'org/repositories/group-1'
           - 'org/repositories/group-2'
-          - 'custom'
-      custom_module:
-        description: 'Custom module directory if "custom" is selected above (e.g. org/repositories/group-3)'
-        required: false
-        type: string
-        default: ''
       action:
         description: 'Terraform action to perform'
         required: true
@@ -33,12 +27,12 @@ on:
           - 'destroy'
 
 concurrency:
-  group: terragrunt-${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }}
+  group: terragrunt-pipeline
   cancel-in-progress: false
 
 jobs:
   terragrunt:
-    name: Terragrunt ${{ inputs.action }} (${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }})
+    name: Terragrunt ${{ inputs.action }} (${{ inputs.module }})
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -46,7 +40,7 @@ jobs:
     env:
       ORG_OWNER: ${{ vars.ORG_OWNER || secrets.ORG_OWNER }}
       INFRA_APP_ID: ${{ vars.INFRA_APP_ID || secrets.INFRA_APP_ID }}
-      INFRA_APP_INSTALATION_ID: ${{ vars.INFRA_APP_INSTALATION_ID || vars.INFRA_APP_INSTALLATION_ID || secrets.INFRA_APP_INSTALATION_ID }}
+      INFRA_APP_INSTALLATION_ID: ${{ vars.INFRA_APP_INSTALLATION_ID || vars.INFRA_APP_INSTALATION_ID || secrets.INFRA_APP_INSTALLATION_ID || secrets.INFRA_APP_INSTALATION_ID }}
 
     steps:
       - name: Checkout repository
@@ -64,31 +58,12 @@ jobs:
           terragrunt-version-file: .terragrunt-version
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify CLI Tools
-        run: |
-          terraform -version
-          terragrunt -version
-
-      - name: Validate Repository Variables
-        run: |
-          MISSING_VARS=()
-          [ -z "$ORG_OWNER" ] && MISSING_VARS+=("ORG_OWNER")
-          [ -z "$INFRA_APP_ID" ] && MISSING_VARS+=("INFRA_APP_ID")
-          [ -z "$INFRA_APP_INSTALATION_ID" ] && MISSING_VARS+=("INFRA_APP_INSTALATION_ID")
-
-          if [ ${#MISSING_VARS[@]} -ne 0 ]; then
-            echo "::error::Missing required repository variable(s): ${MISSING_VARS[*]}."
-            echo "Please configure them in GitHub Repository Settings -> Secrets and variables -> Actions -> Variables."
-            exit 1
-          fi
-          echo "All required repository variables (ORG_OWNER, INFRA_APP_ID, INFRA_APP_INSTALATION_ID) are configured."
-
       - name: Configure GitHub App Private Key
         env:
-          GH_APP_KEY: ${{ secrets.INFRA_APP_PRIVATE__KEY || secrets.INFRA_APP_PRIVATE_KEY || secrets.GH_APP_PRIVATE_KEY || secrets.GITHUB_APP_PRIVATE_KEY }}
+          GH_APP_KEY: ${{ secrets.INFRA_APP_PRIVATE_KEY || secrets.INFRA_APP_PRIVATE__KEY || secrets.GH_APP_PRIVATE_KEY || secrets.GITHUB_APP_PRIVATE_KEY }}
         run: |
           if [ -z "$GH_APP_KEY" ]; then
-            echo "::error::Missing GitHub App private key secret (INFRA_APP_PRIVATE__KEY)."
+            echo "::error::Missing GitHub App private key secret (INFRA_APP_PRIVATE_KEY or INFRA_APP_PRIVATE__KEY)."
             echo "Please configure it in GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets."
             exit 1
           fi
@@ -101,25 +76,12 @@ jobs:
         id: resolve
         run: |
           RAW_MODULE="${{ inputs.module }}"
-          CUSTOM_MODULE="${{ inputs.custom_module }}"
-          ACTION="${{ inputs.action }}"
 
-          if [ "$RAW_MODULE" = "custom" ]; then
-            if [ -z "$CUSTOM_MODULE" ]; then
-              echo "::error::'custom' module selected but 'custom_module' input was left empty."
-              exit 1
-            fi
-            TARGET_PATH="$CUSTOM_MODULE"
-          elif [ "$RAW_MODULE" = "all" ]; then
+          if [ "$RAW_MODULE" = "all" ]; then
             TARGET_PATH="org"
           else
             TARGET_PATH="$RAW_MODULE"
           fi
-
-          # Strip leading and trailing slashes / prefixes
-          TARGET_PATH="${TARGET_PATH#/}"
-          TARGET_PATH="${TARGET_PATH#./}"
-          TARGET_PATH="${TARGET_PATH%/}"
 
           if [ ! -d "$TARGET_PATH" ]; then
             echo "::error::Target directory '$TARGET_PATH' does not exist in repository."
@@ -134,36 +96,33 @@ jobs:
 
           echo "target_path=$TARGET_PATH" >> "$GITHUB_OUTPUT"
           echo "is_single_unit=$IS_SINGLE_UNIT" >> "$GITHUB_OUTPUT"
-          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
 
           echo "Selected Target Path: $TARGET_PATH"
           echo "Execution Mode: $([ "$IS_SINGLE_UNIT" = "true" ] && echo "Single Unit" || echo "Stack (--all)")"
-          echo "Action: $ACTION"
+          echo "Action: ${{ inputs.action }}"
 
       - name: Run Terragrunt
         id: terragrunt
         env:
           TARGET_PATH: ${{ steps.resolve.outputs.target_path }}
           IS_SINGLE_UNIT: ${{ steps.resolve.outputs.is_single_unit }}
-          ACTION: ${{ steps.resolve.outputs.action }}
+          ACTION: ${{ inputs.action }}
         run: |
           set -euo pipefail
 
+          EXTRA_ARGS="-input=false"
           if [ "$ACTION" = "apply" ] || [ "$ACTION" = "destroy" ]; then
-            EXTRA_ARGS="-auto-approve -input=false"
-          else
-            EXTRA_ARGS="-input=false"
+            EXTRA_ARGS="-auto-approve $EXTRA_ARGS"
           fi
 
-          if [ "$IS_SINGLE_UNIT" = "true" ]; then
-            echo "::group::Running Terragrunt single unit ($ACTION)"
-            terragrunt run "$ACTION" --non-interactive --working-dir "$TARGET_PATH" -- $EXTRA_ARGS
-            echo "::endgroup::"
-          else
-            echo "::group::Running Terragrunt stack ($ACTION --all)"
-            terragrunt run --all "$ACTION" --non-interactive --working-dir "$TARGET_PATH" -- $EXTRA_ARGS
-            echo "::endgroup::"
+          RUN_ALL_FLAG=""
+          if [ "$IS_SINGLE_UNIT" != "true" ]; then
+            RUN_ALL_FLAG="--all"
           fi
+
+          echo "::group::Running Terragrunt ($ACTION, single_unit=$IS_SINGLE_UNIT)"
+          terragrunt run $RUN_ALL_FLAG "$ACTION" --non-interactive --working-dir "$TARGET_PATH" -- $EXTRA_ARGS
+          echo "::endgroup::"
 
       - name: Generate Summary
         if: always()

@@ -10,8 +10,8 @@ module "sample_service" {
   topics                 = ["microservice", "sample", "backend"]
 
   team_permissions = {
-    (lookup(var.teams, "platform-engineering", { slug = "platform-engineering" }).slug) = "admin"
-    (lookup(var.teams, "backend-developers", { slug = "backend-developers" }).slug) = "push"
+    "platform-engineering" = "admin"
+    "backend-developers"   = "push"
   }
 
   environments = {
@@ -41,7 +41,7 @@ module "sample_service_rulesets" {
   source = "../../../modules/ruleset"
 
   repository      = module.sample_service.name
-  bypass_team_ids = [lookup(var.teams, "platform-engineering", { id = "1001" }).id]
+  bypass_team_ids = [try(var.teams["platform-engineering"].id, "1001")]
 
   block_force_push = {
     name     = "sample-service-block-force-push"
