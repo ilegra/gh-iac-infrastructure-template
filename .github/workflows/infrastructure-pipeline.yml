@@ -39,7 +39,7 @@ concurrency:
 jobs:
   terragrunt:
     name: Terragrunt ${{ inputs.action }} (${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
 
