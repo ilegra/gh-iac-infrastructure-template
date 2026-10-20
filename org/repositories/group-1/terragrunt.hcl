@@ -31,27 +31,11 @@ dependency "teams" {
       }
     }
   }
-  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan", "destroy"]
 }
 
-dependency "settings" {
-  config_path = "../../settings"
-
-  mock_outputs = {
-    id = "mock-settings-id"
-  }
-  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
-}
-
-dependency "rulesets" {
-  config_path = "../../rulesets"
-
-  mock_outputs = {
-    rulesets = {
-      block_force_push = { org = "mock-ruleset-id", repo = null }
-    }
-  }
-  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+dependencies {
+  paths = ["../../settings", "../../rulesets"]
 }
 
 inputs = {
