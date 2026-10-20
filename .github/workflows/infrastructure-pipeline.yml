@@ -41,6 +41,7 @@ jobs:
       ORG_OWNER: ${{ vars.ORG_OWNER || secrets.ORG_OWNER }}
       INFRA_APP_ID: ${{ vars.INFRA_APP_ID || secrets.INFRA_APP_ID }}
       INFRA_APP_INSTALLATION_ID: ${{ vars.INFRA_APP_INSTALLATION_ID || vars.INFRA_APP_INSTALATION_ID || secrets.INFRA_APP_INSTALLATION_ID || secrets.INFRA_APP_INSTALATION_ID }}
+      INFRA_APP_INSTALATION_ID: ${{ vars.INFRA_APP_INSTALLATION_ID || vars.INFRA_APP_INSTALATION_ID || secrets.INFRA_APP_INSTALLATION_ID || secrets.INFRA_APP_INSTALATION_ID }}
 
     steps:
       - name: Checkout repository

@@ -1,7 +1,7 @@
 locals {
   github_owner               = get_env("ORG_OWNER")
   github_app_id              = get_env("INFRA_APP_ID")
-  github_app_installation_id = get_env("INFRA_APP_INSTALATION_ID")
+  github_app_installation_id = coalesce(get_env("INFRA_APP_INSTALLATION_ID", ""), get_env("INFRA_APP_INSTALATION_ID", ""))
 }
 
 remote_state {
@@ -11,7 +11,7 @@ remote_state {
     if_exists = "overwrite_terragrunt"
   }
   config = {
-    path = "${get_parent_terragrunt_dir()}/.terragrunt-state/${path_relative_to_include()}/terraform.tfstate"
+    path = "${get_repo_root()}/.terragrunt-state/${path_relative_to_include()}/terraform.tfstate"
   }
 }
 
