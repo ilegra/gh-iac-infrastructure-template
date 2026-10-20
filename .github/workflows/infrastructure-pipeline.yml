@@ -1,0 +1,189 @@
+name: Github infrastructure pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'Module/unit to apply (or "all" for the entire organization)'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - 'all'
+          - 'org/settings'
+          - 'org/teams'
+          - 'org/rulesets'
+          - 'org/repositories'
+          - 'org/repositories/group-1'
+          - 'org/repositories/group-2'
+          - 'custom'
+      custom_module:
+        description: 'Custom module directory if "custom" is selected above (e.g. org/repositories/group-3)'
+        required: false
+        type: string
+        default: ''
+      action:
+        description: 'Terraform action to perform'
+        required: true
+        type: choice
+        default: 'apply'
+        options:
+          - 'apply'
+          - 'plan'
+
+concurrency:
+  group: terragrunt-${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }}
+  cancel-in-progress: false
+
+jobs:
+  terragrunt:
+    name: Terragrunt ${{ inputs.action }} (${{ inputs.module == 'custom' && inputs.custom_module || inputs.module }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      ORG_OWNER: ${{ vars.ORG_OWNER || secrets.ORG_OWNER }}
+      INFRA_APP_ID: ${{ vars.INFRA_APP_ID || secrets.INFRA_APP_ID }}
+      INFRA_APP_INSTALATION_ID: ${{ vars.INFRA_APP_INSTALATION_ID || vars.INFRA_APP_INSTALLATION_ID || secrets.INFRA_APP_INSTALATION_ID }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+
+      - name: Setup Terragrunt
+        uses: autero1/action-terragrunt@v3
+        with:
+          terragrunt-version-file: .terragrunt-version
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify CLI Tools
+        run: |
+          terraform -version
+          terragrunt -version
+
+      - name: Validate Repository Variables
+        run: |
+          MISSING_VARS=()
+          [ -z "$ORG_OWNER" ] && MISSING_VARS+=("ORG_OWNER")
+          [ -z "$INFRA_APP_ID" ] && MISSING_VARS+=("INFRA_APP_ID")
+          [ -z "$INFRA_APP_INSTALATION_ID" ] && MISSING_VARS+=("INFRA_APP_INSTALATION_ID")
+
+          if [ ${#MISSING_VARS[@]} -ne 0 ]; then
+            echo "::error::Missing required repository variable(s): ${MISSING_VARS[*]}."
+            echo "Please configure them in GitHub Repository Settings -> Secrets and variables -> Actions -> Variables."
+            exit 1
+          fi
+          echo "All required repository variables (ORG_OWNER, INFRA_APP_ID, INFRA_APP_INSTALATION_ID) are configured."
+
+      - name: Configure GitHub App Private Key
+        env:
+          GH_APP_KEY: ${{ secrets.INFRA_APP_PRIVATE__KEY || secrets.INFRA_APP_PRIVATE_KEY || secrets.GH_APP_PRIVATE_KEY || secrets.GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GH_APP_KEY" ]; then
+            echo "::error::Missing GitHub App private key secret (INFRA_APP_PRIVATE__KEY)."
+            echo "Please configure it in GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets."
+            exit 1
+          fi
+          # Write private key with restricted file permissions
+          printf "%s\n" "$GH_APP_KEY" > github-app-private-key.pem
+          chmod 600 github-app-private-key.pem
+          echo "GitHub App private key configured successfully."
+
+      - name: Resolve Target Directory
+        id: resolve
+        run: |
+          RAW_MODULE="${{ inputs.module }}"
+          CUSTOM_MODULE="${{ inputs.custom_module }}"
+          ACTION="${{ inputs.action }}"
+
+          if [ "$RAW_MODULE" = "custom" ]; then
+            if [ -z "$CUSTOM_MODULE" ]; then
+              echo "::error::'custom' module selected but 'custom_module' input was left empty."
+              exit 1
+            fi
+            TARGET_PATH="$CUSTOM_MODULE"
+          elif [ "$RAW_MODULE" = "all" ]; then
+            TARGET_PATH="org"
+          else
+            TARGET_PATH="$RAW_MODULE"
+          fi
+
+          # Strip leading and trailing slashes / prefixes
+          TARGET_PATH="${TARGET_PATH#/}"
+          TARGET_PATH="${TARGET_PATH#./}"
+          TARGET_PATH="${TARGET_PATH%/}"
+
+          if [ ! -d "$TARGET_PATH" ]; then
+            echo "::error::Target directory '$TARGET_PATH' does not exist in repository."
+            exit 1
+          fi
+
+          if [ -f "$TARGET_PATH/terragrunt.hcl" ]; then
+            IS_SINGLE_UNIT="true"
+          else
+            IS_SINGLE_UNIT="false"
+          fi
+
+          echo "target_path=$TARGET_PATH" >> "$GITHUB_OUTPUT"
+          echo "is_single_unit=$IS_SINGLE_UNIT" >> "$GITHUB_OUTPUT"
+          echo "action=$ACTION" >> "$GITHUB_OUTPUT"
+
+          echo "Selected Target Path: $TARGET_PATH"
+          echo "Execution Mode: $([ "$IS_SINGLE_UNIT" = "true" ] && echo "Single Unit" || echo "Stack (--all)")"
+          echo "Action: $ACTION"
+
+      - name: Run Terragrunt
+        id: terragrunt
+        env:
+          TARGET_PATH: ${{ steps.resolve.outputs.target_path }}
+          IS_SINGLE_UNIT: ${{ steps.resolve.outputs.is_single_unit }}
+          ACTION: ${{ steps.resolve.outputs.action }}
+        run: |
+          set -euo pipefail
+
+          if [ "$ACTION" = "apply" ]; then
+            EXTRA_ARGS="-auto-approve -input=false"
+          else
+            EXTRA_ARGS="-input=false"
+          fi
+
+          if [ "$IS_SINGLE_UNIT" = "true" ]; then
+            echo "::group::Running Terragrunt single unit ($ACTION)"
+            terragrunt run "$ACTION" --non-interactive --working-dir "$TARGET_PATH" -- $EXTRA_ARGS
+            echo "::endgroup::"
+          else
+            echo "::group::Running Terragrunt stack ($ACTION --all)"
+            terragrunt run --all "$ACTION" --non-interactive --working-dir "$TARGET_PATH" -- $EXTRA_ARGS
+            echo "::endgroup::"
+          fi
+
+      - name: Generate Summary
+        if: always()
+        run: |
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          ## 🚀 Terragrunt Execution Summary
+
+          - **Action**: \`${{ inputs.action }}\`
+          - **Module Selected**: \`${{ inputs.module }}\`
+          - **Target Directory**: \`${{ steps.resolve.outputs.target_path || 'N/A' }}\`
+          - **Execution Mode**: \`${{ steps.resolve.outputs.is_single_unit == 'true' && 'Single Unit' || 'All Units (Stack)' }}\`
+          - **Organization**: \`${ORG_OWNER:-N/A}\`
+          - **App ID**: \`${INFRA_APP_ID:-N/A}\`
+          - **Status**: ${{ job.status == 'success' && '✅ Succeeded' || '❌ Failed' }}
+
+          ---
+          *Triggered manually via workflow_dispatch by @${{ github.actor }}*
+          EOF
+
+      - name: Cleanup GitHub App Private Key
+        if: always()
+        run: |
+          rm -f github-app-private-key.pem
+          echo "GitHub App private key cleaned up."
