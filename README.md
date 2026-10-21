@@ -1,12 +1,12 @@
-# GitHub Infrastructure as Code Skeleton
+# GitHub Infrastructure as Code Template
 
-Production-ready GitHub Infrastructure-as-Code (IaC) skeleton repository and template for GitHub organizations using **Terraform (>= 1.16.0)** with the [`integrations/github`](https://registry.terraform.io/providers/integrations/github/latest/docs) provider (~> 6.0) and **Terragrunt (>= 1.1.0)** for modular state isolation and orchestration.
+Production-ready GitHub Infrastructure-as-Code (IaC) emplate repository and template for GitHub organizations using **Terraform (>= 1.16.0)** with the [`integrations/github`](https://registry.terraform.io/providers/integrations/github/latest/docs) provider (~> 6.0) and **Terragrunt (>= 1.1.0)** for modular state isolation and orchestration.
 
 ---
 
 ## Using this Repository as a Template
 
-To use this skeleton to manage your organization's GitHub infrastructure:
+To use this emplate to manage your organization's GitHub infrastructure:
 
 1. Click **Use this template** $\rightarrow$ **Create a new repository** in the GitHub UI.
 2. Select your target GitHub organization and choose a repository name (e.g., `gh-infrastructure`).
