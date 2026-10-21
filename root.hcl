@@ -1,7 +1,7 @@
 locals {
-  github_owner               = get_env("ORG_OWNER")
-  github_app_id              = get_env("INFRA_APP_ID")
-  github_app_installation_id = coalesce(get_env("INFRA_APP_INSTALLATION_ID", ""), get_env("INFRA_APP_INSTALATION_ID", ""))
+  github_owner               = coalesce(get_env("GITHUB_OWNER", ""), get_env("GITHUB_ORG", ""), get_env("ORG_OWNER", ""))
+  github_app_id              = coalesce(get_env("GITHUB_APP_ID", ""), get_env("INFRA_APP_ID", ""))
+  github_app_installation_id = coalesce(get_env("GITHUB_APP_INSTALLATION_ID", ""), get_env("INFRA_APP_INSTALLATION_ID", ""), get_env("INFRA_APP_INSTALATION_ID", ""))
 }
 
 remote_state {

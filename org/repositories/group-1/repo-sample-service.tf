@@ -2,7 +2,7 @@ module "sample_service" {
   source = "../../../modules/repository"
 
   name                   = "sample-service"
-  description            = "Sample microservice repository for ilegra organization"
+  description            = "Sample microservice repository"
   visibility             = "public"
   default_branch         = "main"
   delete_branch_on_merge = true
